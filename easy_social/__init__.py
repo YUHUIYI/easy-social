@@ -75,6 +75,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         SUPABASE_URL=os.environ.get("SUPABASE_URL"),
         SUPABASE_SERVICE_ROLE_KEY=os.environ.get("SUPABASE_SERVICE_ROLE_KEY"),
         SUPABASE_STORAGE_BUCKET=os.environ.get("SUPABASE_STORAGE_BUCKET", "easy-social-media"),
+        BRAND_NAME=os.environ.get("BRAND_NAME", "游輝毅's Easy Social"),
     )
 
     if test_config:
@@ -104,6 +105,10 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(social_bp)
     app.jinja_env.globals["media_url"] = media_url
+
+    @app.context_processor
+    def inject_brand_name() -> dict[str, str]:
+        return {"brand_name": app.config["BRAND_NAME"]}
 
     @app.cli.command("init-db")
     def init_db_command() -> None:

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from easy_social import create_app
 from easy_social.extensions import db
@@ -40,5 +43,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    env_file = Path(".env") if Path(".env").exists() else Path("env")
+    if env_file.exists():
+        load_dotenv(dotenv_path=env_file, override=False)
     os.environ.setdefault("MEDIA_STORAGE_BACKEND", "supabase")
     main()
