@@ -30,18 +30,56 @@
     }
   }
 
+  function setupComposerType(composer, mediaInput, preview, frame, name, state) {
+    const pollOptions = composer.querySelector("[data-poll-options]");
+    const mediaPicker = composer.querySelector("[data-composer-media]");
+    const body = composer.querySelector("[data-composer-body]");
+    const typeInputs = composer.querySelectorAll("[data-post-type]");
+
+    if (!pollOptions || !typeInputs.length) {
+      return;
+    }
+
+    function updateComposerMode() {
+      const selected = composer.querySelector("[data-post-type]:checked");
+      const isPoll = selected && selected.value === "poll";
+      pollOptions.hidden = !isPoll;
+      if (mediaPicker) {
+        mediaPicker.hidden = isPoll;
+        if (mediaInput) {
+          mediaInput.disabled = isPoll;
+        }
+        if (isPoll && preview && frame && name) {
+          clearPreview(preview, frame, name, mediaInput, state);
+        }
+      }
+      if (body) {
+        body.placeholder = isPoll ? "Ask a question for your poll" : "What is happening?";
+      }
+      pollOptions.querySelectorAll("[data-poll-required]").forEach(function (field) {
+        field.required = isPoll;
+      });
+    }
+
+    typeInputs.forEach(function (input) {
+      input.addEventListener("change", updateComposerMode);
+    });
+    updateComposerMode();
+  }
+
   function setupComposer(composer) {
     const input = composer.querySelector("[data-media-input]");
     const preview = composer.querySelector("[data-media-preview]");
     const frame = composer.querySelector("[data-media-preview-frame]");
     const name = composer.querySelector("[data-media-preview-name]");
     const clear = composer.querySelector("[data-media-preview-clear]");
+    const state = { objectUrl: "" };
 
-    if (!input || !preview || !frame || !name || !clear) {
+    if (!input || !preview || !frame || !name) {
       return;
     }
 
-    const state = { objectUrl: "" };
+    setupComposerType(composer, input, preview, frame, name, state);
 
     input.addEventListener("change", function () {
       const file = input.files && input.files[0];
@@ -74,10 +112,12 @@
       preview.hidden = false;
     });
 
-    clear.addEventListener("click", function () {
-      clearPreview(preview, frame, name, input, state);
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    if (clear) {
+      clear.addEventListener("click", function () {
+        clearPreview(preview, frame, name, input, state);
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    }
   }
 
   function setupCaptchaRefresh(button) {

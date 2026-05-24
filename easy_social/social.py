@@ -7,7 +7,8 @@ from sqlalchemy.orm import joinedload
 
 from .extensions import db
 from .media import save_media
-from .models import Comment, Post, User, followers
+from .models import Comment, Poll, PollOption, PollVote, Post, User, followers
+from .polls import normalize_poll_options, poll_results_for_posts
 
 bp = Blueprint("social", __name__)
 
@@ -16,6 +17,8 @@ def _post_query():
     return Post.query.options(
         joinedload(Post.author),
         joinedload(Post.repost_of).joinedload(Post.author),
+        joinedload(Post.poll).joinedload(Poll.options),
+        joinedload(Post.repost_of).joinedload(Post.poll).joinedload(Poll.options),
     )
 
 
@@ -51,6 +54,22 @@ def _followed_user_ids(users: list[User]) -> set[int]:
     }
 
 
+def _render_posts(
+    template_name: str,
+    posts: list[Post],
+    **context,
+):
+    poll_results, user_poll_votes = poll_results_for_posts(posts, current_user.id)
+    return render_template(
+        template_name,
+        posts=posts,
+        comment_counts=_comment_counts_for_posts(posts),
+        poll_results=poll_results,
+        user_poll_votes=user_poll_votes,
+        **context,
+    )
+
+
 @bp.route("/")
 @login_required
 def feed():
@@ -64,11 +83,7 @@ def feed():
         .limit(100)
         .all()
     )
-    return render_template(
-        "social/feed.html",
-        posts=posts,
-        comment_counts=_comment_counts_for_posts(posts),
-    )
+    return _render_posts("social/feed.html", posts)
 
 
 @bp.route("/explore")
@@ -76,11 +91,10 @@ def feed():
 def explore():
     posts = _post_query().order_by(desc(Post.created_at)).limit(100).all()
     users = User.query.filter(User.id != current_user.id).order_by(User.username).limit(50).all()
-    return render_template(
+    return _render_posts(
         "social/explore.html",
         posts=posts,
         users=users,
-        comment_counts=_comment_counts_for_posts(posts),
         followed_user_ids=_followed_user_ids(users),
     )
 
@@ -88,7 +102,26 @@ def explore():
 @bp.post("/posts")
 @login_required
 def create_post():
+    post_type = request.form.get("post_type", Post.POST_TYPE_STANDARD)
     body = request.form.get("body", "").strip()
+
+    if post_type == Post.POST_TYPE_POLL:
+        raw_options = [request.form.get(f"poll_option_{index}", "") for index in range(1, 5)]
+        options = normalize_poll_options(raw_options)
+        if not body:
+            flash("Add a poll question before posting.", "error")
+            return redirect(request.referrer or url_for("social.feed"))
+        if options is None:
+            flash("Poll posts need between 2 and 4 non-empty options.", "error")
+            return redirect(request.referrer or url_for("social.feed"))
+
+        post = Post(body=body, post_type=Post.POST_TYPE_POLL, author=current_user)
+        poll = Poll(post=post)
+        for position, label in enumerate(options):
+            poll.options.append(PollOption(label=label, position=position))
+        db.session.add(post)
+        db.session.commit()
+        return redirect(url_for("social.feed"))
 
     try:
         media_filename, media_type = save_media(request.files.get("media"))
@@ -102,6 +135,7 @@ def create_post():
 
     post = Post(
         body=body,
+        post_type=Post.POST_TYPE_STANDARD,
         media_filename=media_filename,
         media_type=media_type,
         author=current_user,
@@ -116,11 +150,14 @@ def create_post():
 def post_detail(post_id: int):
     post = _post_query().filter(Post.id == post_id).first_or_404()
     comments = post.comments.order_by(Comment.created_at.asc()).all()
+    poll_results, user_poll_votes = poll_results_for_posts([post], current_user.id)
     return render_template(
         "social/post_detail.html",
         post=post,
         comments=comments,
         comment_counts={post.display_post.id: len(comments)},
+        poll_results=poll_results,
+        user_poll_votes=user_poll_votes,
     )
 
 
@@ -135,6 +172,33 @@ def add_comment(post_id: int):
         db.session.add(Comment(body=body, author=current_user, post=post))
         db.session.commit()
     return redirect(url_for("social.post_detail", post_id=post.id))
+
+
+@bp.post("/posts/<int:post_id>/poll/vote")
+@login_required
+def vote_poll(post_id: int):
+    post = db.get_or_404(Post, post_id).display_post
+    if not post.is_poll:
+        flash("This post is not a poll.", "error")
+        return redirect(request.referrer or url_for("social.feed"))
+
+    option_id = request.form.get("poll_option_id", type=int)
+    option = PollOption.query.filter_by(id=option_id, poll_id=post.poll.id).first()
+    if option is None:
+        flash("Choose a valid poll option.", "error")
+        return redirect(request.referrer or url_for("social.feed"))
+
+    existing = PollVote.query.filter_by(poll_id=post.poll.id, user_id=current_user.id).first()
+    if existing:
+        if existing.poll_option_id == option.id:
+            return redirect(request.referrer or url_for("social.feed"))
+        existing.poll_option_id = option.id
+    else:
+        db.session.add(
+            PollVote(poll=post.poll, option=option, user_id=current_user.id)
+        )
+    db.session.commit()
+    return redirect(request.referrer or url_for("social.feed"))
 
 
 @bp.post("/posts/<int:post_id>/repost")
@@ -165,12 +229,7 @@ def profile(username: str):
         .order_by(desc(Post.created_at))
         .all()
     )
-    return render_template(
-        "social/profile.html",
-        profile_user=user,
-        posts=posts,
-        comment_counts=_comment_counts_for_posts(posts),
-    )
+    return _render_posts("social/profile.html", posts=posts, profile_user=user)
 
 
 @bp.post("/users/<username>/follow")
