@@ -26,11 +26,18 @@ def normalize_poll_options(raw_options: list[str]) -> list[str] | None:
 
 def build_poll_results(poll: Poll) -> list[PollOptionResult]:
     options = sorted(poll.options, key=lambda option: option.position)
-    counts = {option.id: option.votes.count() for option in options}
+    option_ids = [option.id for option in options]
+    vote_count_rows = (
+        PollVote.query.with_entities(PollVote.poll_option_id, PollVote.poll_option_id.count())
+        .filter(PollVote.poll_option_id.in_(option_ids))
+        .group_by(PollVote.poll_option_id)
+        .all()
+    ) if option_ids else []
+    counts = {option_id: vote_count for option_id, vote_count in vote_count_rows}
     total = sum(counts.values())
     results: list[PollOptionResult] = []
     for option in options:
-        vote_count = counts[option.id]
+        vote_count = counts.get(option.id, 0)
         percent = round((vote_count / total) * 100, 1) if total else 0.0
         results.append(
             PollOptionResult(
