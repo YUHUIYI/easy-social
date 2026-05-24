@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from easy_social.extensions import db
 from easy_social.models import PollVote, Post, User
 
-from conftest import login, logout, register
+from conftest import logout, register
 
 pytestmark = pytest.mark.integration
 
