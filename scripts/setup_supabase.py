@@ -7,12 +7,13 @@ from dotenv import load_dotenv
 
 from easy_social import create_app
 from easy_social.extensions import db
+from easy_social.schema import ensure_poll_schema
 
 
 def main() -> None:
     app = create_app()
     with app.app_context():
-        db.create_all()
+        ensure_poll_schema()
 
         if app.config.get("MEDIA_STORAGE_BACKEND") != "supabase":
             print("Initialized database. Set MEDIA_STORAGE_BACKEND=supabase to create a bucket.")

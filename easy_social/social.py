@@ -3,6 +3,7 @@ from __future__ import annotations
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import desc, func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
 from .extensions import db
@@ -193,11 +194,22 @@ def vote_poll(post_id: int):
         if existing.poll_option_id == option.id:
             return redirect(request.referrer or url_for("social.feed"))
         existing.poll_option_id = option.id
-    else:
-        db.session.add(
-            PollVote(poll=post.poll, option=option, user_id=current_user.id)
-        )
-    db.session.commit()
+        db.session.commit()
+        return redirect(request.referrer or url_for("social.feed"))
+
+    db.session.add(PollVote(poll=post.poll, option=option, user_id=current_user.id))
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        existing = PollVote.query.filter_by(
+            poll_id=post.poll.id, user_id=current_user.id
+        ).first()
+        if existing is None:
+            raise
+        if existing.poll_option_id != option.id:
+            existing.poll_option_id = option.id
+            db.session.commit()
     return redirect(request.referrer or url_for("social.feed"))
 
 

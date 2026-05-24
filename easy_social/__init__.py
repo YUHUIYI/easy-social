@@ -92,6 +92,10 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     db.init_app(app)
     migrate.init_app(app, db)
+    with app.app_context():
+        from .schema import ensure_poll_schema
+
+        ensure_poll_schema()
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
 
