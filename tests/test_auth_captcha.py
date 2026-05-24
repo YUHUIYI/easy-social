@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from easy_social.extensions import db
 from easy_social.models import User
 
 pytestmark = pytest.mark.integration
