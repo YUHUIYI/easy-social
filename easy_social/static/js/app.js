@@ -80,7 +80,21 @@
     });
   }
 
+  function setupCaptchaRefresh(button) {
+    const image = document.getElementById("captcha-image");
+    if (!image) {
+      return;
+    }
+
+    button.addEventListener("click", function () {
+      const url = new URL(image.src, window.location.origin);
+      url.searchParams.set("t", String(Date.now()));
+      image.src = url.toString();
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll("form.composer").forEach(setupComposer);
+    document.querySelectorAll("[data-captcha-refresh]").forEach(setupCaptchaRefresh);
   });
 })();
