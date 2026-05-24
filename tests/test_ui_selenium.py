@@ -229,18 +229,30 @@ def test_user_can_register_create_post_and_comment(browser, live_server):
 
 
 @pytest.mark.ui
-def test_user_can_create_poll_and_vote_in_ui(browser, live_server):
+def test_user_can_create_poll_and_vote_in_ui(browser, live_server, tmp_path):
     register_via_ui(browser, live_server, "alice")
     composer = browser.find_element(By.CSS_SELECTOR, "form.composer")
+    media_path = tmp_path / "poll-preview.png"
+    media_path.write_bytes(b"fake image data")
+    media_input = composer.find_element(By.NAME, "media")
+    browser.execute_script("arguments[0].style.display = 'block';", media_input)
+    media_input.send_keys(str(media_path))
+    preview = composer.find_element(By.CSS_SELECTOR, "[data-media-preview]")
+    WebDriverWait(browser, 5).until(lambda _: preview.is_displayed())
+
     poll_radio = composer.find_element(By.CSS_SELECTOR, 'input[name="post_type"][value="poll"]')
     browser.execute_script(
         "arguments[0].checked = true;"
         "arguments[0].dispatchEvent(new Event('change', { bubbles: true }));",
         poll_radio,
     )
-    poll_options = WebDriverWait(browser, 5).until(
+    WebDriverWait(browser, 5).until(
         EC.visibility_of_element_located((By.CSS_SELECTOR, "[data-poll-options]"))
     )
+    WebDriverWait(browser, 5).until(lambda _: not preview.is_displayed())
+    assert media_input.get_attribute("value") == ""
+    assert not media_input.is_enabled()
+
     set_field_value(browser, composer.find_element(By.NAME, "body"), "Favorite IDE?")
     set_field_value(browser, composer.find_element(By.NAME, "poll_option_1"), "VS Code")
     set_field_value(browser, composer.find_element(By.NAME, "poll_option_2"), "PyCharm")

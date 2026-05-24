@@ -30,7 +30,7 @@
     }
   }
 
-  function setupComposerType(composer) {
+  function setupComposerType(composer, mediaInput, preview, frame, name, state) {
     const pollOptions = composer.querySelector("[data-poll-options]");
     const mediaPicker = composer.querySelector("[data-composer-media]");
     const body = composer.querySelector("[data-composer-body]");
@@ -46,6 +46,12 @@
       pollOptions.hidden = !isPoll;
       if (mediaPicker) {
         mediaPicker.hidden = isPoll;
+        if (mediaInput) {
+          mediaInput.disabled = isPoll;
+        }
+        if (isPoll && preview && frame && name) {
+          clearPreview(preview, frame, name, mediaInput, state);
+        }
       }
       if (body) {
         body.placeholder = isPoll ? "Ask a question for your poll" : "What is happening?";
@@ -62,19 +68,18 @@
   }
 
   function setupComposer(composer) {
-    setupComposerType(composer);
-
     const input = composer.querySelector("[data-media-input]");
     const preview = composer.querySelector("[data-media-preview]");
     const frame = composer.querySelector("[data-media-preview-frame]");
     const name = composer.querySelector("[data-media-preview-name]");
     const clear = composer.querySelector("[data-media-preview-clear]");
+    const state = { objectUrl: "" };
+
+    setupComposerType(composer, input, preview, frame, name, state);
 
     if (!input || !preview || !frame || !name || !clear) {
       return;
     }
-
-    const state = { objectUrl: "" };
 
     input.addEventListener("change", function () {
       const file = input.files && input.files[0];
