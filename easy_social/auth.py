@@ -23,7 +23,6 @@ def _issue_captcha() -> str | None:
 
 @bp.get("/captcha")
 def captcha_image():
-    testing = current_app.config.get("TESTING", False)
     plaintext = get_plaintext_for_tests(session)
     if plaintext:
         image_bytes = render_image(plaintext)
