@@ -125,9 +125,16 @@ def register_via_ui(browser, live_server: str, username: str):
     form = WebDriverWait(browser, 10).until(
         EC.presence_of_element_located((By.CSS_SELECTOR, "form.form-stack"))
     )
+    WebDriverWait(browser, 10).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "#captcha-image"))
+    )
     set_field_value(browser, form.find_element(By.NAME, "username"), username)
     set_field_value(browser, form.find_element(By.NAME, "email"), f"{username}@example.com")
     set_field_value(browser, form.find_element(By.NAME, "password"), "password")
+    captcha_field = form.find_element(By.NAME, "captcha")
+    captcha_value = captcha_field.get_attribute("value")
+    assert captcha_value, "Expected testing CAPTCHA hint on register form"
+    set_field_value(browser, captcha_field, captcha_value)
     submit_form(browser, form)
     wait_for_feed(browser)
 
@@ -170,6 +177,20 @@ def test_composer_shows_media_preview_before_posting(
     preview.find_element(By.CSS_SELECTOR, "[data-media-preview-clear]").click()
     WebDriverWait(browser, 5).until(lambda _: not preview.is_displayed())
     assert media_input.get_attribute("value") == ""
+
+
+@pytest.mark.ui
+def test_register_rejects_wrong_captcha_in_ui(browser, live_server):
+    browser.get(f"{live_server}/auth/register")
+    form = WebDriverWait(browser, 10).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "form.form-stack"))
+    )
+    set_field_value(browser, form.find_element(By.NAME, "username"), "blockedbot")
+    set_field_value(browser, form.find_element(By.NAME, "email"), "blockedbot@example.com")
+    set_field_value(browser, form.find_element(By.NAME, "password"), "password")
+    set_field_value(browser, form.find_element(By.NAME, "captcha"), "WRONG1")
+    submit_form(browser, form)
+    wait_for_text(browser, "verification code")
 
 
 @pytest.mark.ui
