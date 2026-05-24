@@ -75,11 +75,11 @@
     const clear = composer.querySelector("[data-media-preview-clear]");
     const state = { objectUrl: "" };
 
-    setupComposerType(composer, input, preview, frame, name, state);
-
-    if (!input || !preview || !frame || !name || !clear) {
+    if (!input || !preview || !frame || !name) {
       return;
     }
+
+    setupComposerType(composer, input, preview, frame, name, state);
 
     input.addEventListener("change", function () {
       const file = input.files && input.files[0];
@@ -112,10 +112,12 @@
       preview.hidden = false;
     });
 
-    clear.addEventListener("click", function () {
-      clearPreview(preview, frame, name, input, state);
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    if (clear) {
+      clear.addEventListener("click", function () {
+        clearPreview(preview, frame, name, input, state);
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    }
   }
 
   function setupCaptchaRefresh(button) {
