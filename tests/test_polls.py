@@ -7,6 +7,7 @@ from easy_social.polls import (
     MIN_POLL_OPTIONS,
     build_poll_results,
     normalize_poll_options,
+    poll_results_for_posts,
 )
 
 pytestmark = pytest.mark.unit
@@ -83,3 +84,68 @@ def test_build_poll_results_handles_zero_votes(app):
         results = build_poll_results(poll)
         assert all(result.percent == 0.0 for result in results)
         assert all(result.vote_count == 0 for result in results)
+
+
+def test_poll_results_for_posts_batches_user_votes(app):
+    from sqlalchemy import event
+    from sqlalchemy.orm import joinedload
+
+    from easy_social.extensions import db
+    from easy_social.models import Poll, PollOption, PollVote, Post, User
+
+    with app.app_context():
+        author = User(username="author", email="author@example.com")
+        author.set_password("password")
+        voter = User(username="voter", email="voter@example.com")
+        voter.set_password("password")
+        first_post = Post(body="First poll?", post_type=Post.POST_TYPE_POLL, author=author)
+        first_poll = Poll(post=first_post)
+        first_red = PollOption(poll=first_poll, label="Red", position=0)
+        first_blue = PollOption(poll=first_poll, label="Blue", position=1)
+        second_post = Post(body="Second poll?", post_type=Post.POST_TYPE_POLL, author=author)
+        second_poll = Poll(post=second_post)
+        second_cat = PollOption(poll=second_poll, label="Cat", position=0)
+        second_dog = PollOption(poll=second_poll, label="Dog", position=1)
+        db.session.add_all(
+            [
+                author,
+                voter,
+                first_post,
+                first_poll,
+                first_red,
+                first_blue,
+                second_post,
+                second_poll,
+                second_cat,
+                second_dog,
+                PollVote(poll=first_poll, option=first_red, user=voter),
+                PollVote(poll=second_poll, option=second_dog, user=voter),
+            ]
+        )
+        db.session.commit()
+
+        posts = (
+            Post.query.options(joinedload(Post.poll).joinedload(Poll.options))
+            .order_by(Post.id)
+            .all()
+        )
+        first_post_id = first_post.id
+        second_post_id = second_post.id
+        first_red_id = first_red.id
+        second_dog_id = second_dog.id
+        voter_id = voter.id
+        statements: list[str] = []
+
+        def before_cursor_execute(*args):
+            statement = args[2]
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        event.listen(db.engine, "before_cursor_execute", before_cursor_execute)
+        try:
+            _, user_votes = poll_results_for_posts(posts, voter_id)
+        finally:
+            event.remove(db.engine, "before_cursor_execute", before_cursor_execute)
+
+        assert user_votes == {first_post_id: first_red_id, second_post_id: second_dog_id}
+        assert len(statements) == 3

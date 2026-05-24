@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlalchemy import func
+
 from .models import Poll, PollOption, PollVote
 
 MAX_POLL_OPTIONS = 4
@@ -28,7 +30,7 @@ def build_poll_results(poll: Poll) -> list[PollOptionResult]:
     options = sorted(poll.options, key=lambda option: option.position)
     option_ids = [option.id for option in options]
     vote_count_rows = (
-        PollVote.query.with_entities(PollVote.poll_option_id, PollVote.poll_option_id.count())
+        PollVote.query.with_entities(PollVote.poll_option_id, func.count(PollVote.id))
         .filter(PollVote.poll_option_id.in_(option_ids))
         .group_by(PollVote.poll_option_id)
         .all()
@@ -67,9 +69,19 @@ def poll_results_for_posts(posts, user_id: int) -> tuple[dict[int, list[PollOpti
 
     results_by_post: dict[int, list[PollOptionResult]] = {}
     user_votes_by_post: dict[int, int] = {}
+    poll_id_to_post_id = {poll.id: post_id for post_id, poll in poll_posts.items()}
+    user_vote_rows = (
+        PollVote.query.with_entities(PollVote.poll_id, PollVote.poll_option_id)
+        .filter(PollVote.poll_id.in_(poll_id_to_post_id), PollVote.user_id == user_id)
+        .all()
+    )
+    user_vote_option_ids = {
+        poll_id_to_post_id[poll_id]: option_id for poll_id, option_id in user_vote_rows
+    }
+
     for post_id, poll in poll_posts.items():
         results_by_post[post_id] = build_poll_results(poll)
-        voted_option_id = user_vote_option_id(poll, user_id)
+        voted_option_id = user_vote_option_ids.get(post_id)
         if voted_option_id is not None:
             user_votes_by_post[post_id] = voted_option_id
     return results_by_post, user_votes_by_post
