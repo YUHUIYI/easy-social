@@ -10,7 +10,7 @@ from werkzeug.serving import make_server
 
 from easy_social import create_app
 from easy_social.extensions import db
-from easy_social.models import Comment, Post, User
+from easy_social.models import Comment, Post, User, followers
 
 selenium = pytest.importorskip("selenium")
 
@@ -38,6 +38,9 @@ def ui_app():
         with app.app_context():
             db.create_all()
         yield app
+        with app.app_context():
+            db.session.remove()
+            db.engine.dispose()
 
 
 @pytest.fixture(scope="module")
@@ -82,11 +85,25 @@ def browser():
 
 
 @pytest.fixture(autouse=True)
+def ensure_logged_out(browser, live_server):
+    browser.delete_all_cookies()
+    browser.get(f"{live_server}/auth/logout")
+    yield
+    browser.delete_all_cookies()
+
+
+@pytest.fixture(autouse=True)
 def clean_database(ui_app):
+    from easy_social.models import Poll, PollOption, PollVote
+
     with ui_app.app_context():
-        db.session.query(Comment).delete()
-        db.session.query(Post).delete()
-        db.session.query(User).delete()
+        db.session.execute(followers.delete())
+        db.session.query(PollVote).delete(synchronize_session=False)
+        db.session.query(PollOption).delete(synchronize_session=False)
+        db.session.query(Poll).delete(synchronize_session=False)
+        db.session.query(Comment).delete(synchronize_session=False)
+        db.session.query(Post).delete(synchronize_session=False)
+        db.session.query(User).delete(synchronize_session=False)
         db.session.commit()
 
 
@@ -212,6 +229,42 @@ def test_user_can_register_create_post_and_comment(browser, live_server):
 
 
 @pytest.mark.ui
+def test_user_can_create_poll_and_vote_in_ui(browser, live_server):
+    register_via_ui(browser, live_server, "alice")
+    composer = browser.find_element(By.CSS_SELECTOR, "form.composer")
+    poll_radio = composer.find_element(By.CSS_SELECTOR, 'input[name="post_type"][value="poll"]')
+    browser.execute_script(
+        "arguments[0].checked = true;"
+        "arguments[0].dispatchEvent(new Event('change', { bubbles: true }));",
+        poll_radio,
+    )
+    poll_options = WebDriverWait(browser, 5).until(
+        EC.visibility_of_element_located((By.CSS_SELECTOR, "[data-poll-options]"))
+    )
+    set_field_value(browser, composer.find_element(By.NAME, "body"), "Favorite IDE?")
+    set_field_value(browser, composer.find_element(By.NAME, "poll_option_1"), "VS Code")
+    set_field_value(browser, composer.find_element(By.NAME, "poll_option_2"), "PyCharm")
+    submit_form(browser, composer)
+    wait_for_text(browser, "Favorite IDE?")
+
+    logout_via_ui(browser)
+    register_via_ui(browser, live_server, "bob")
+    browser.get(f"{live_server}/explore")
+    wait_for_text(browser, "@alice")
+    submit_form(browser, browser.find_element(By.CSS_SELECTOR, ".user-row form"))
+    browser.get(f"{live_server}/")
+    wait_for_text(browser, "Favorite IDE?")
+    poll_form = browser.find_element(By.CSS_SELECTOR, "form.poll-vote-form")
+    first_option = poll_form.find_element(By.CSS_SELECTOR, 'input[name="poll_option_id"]')
+    browser.execute_script("arguments[0].checked = true;", first_option)
+    submit_form(browser, poll_form)
+    WebDriverWait(browser, 10).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, ".poll-results"))
+    )
+    wait_for_text(browser, "100.0%")
+
+
+@pytest.mark.ui
 def test_following_user_adds_their_posts_to_feed(browser, live_server):
     register_via_ui(browser, live_server, "bob")
     composer = browser.find_element(By.CSS_SELECTOR, "form.composer")
@@ -221,7 +274,8 @@ def test_following_user_adds_their_posts_to_feed(browser, live_server):
     logout_via_ui(browser)
 
     register_via_ui(browser, live_server, "alice")
-    assert "Bob browser update" not in browser.find_element(By.TAG_NAME, "body").text
+    feed_posts = browser.find_element(By.CSS_SELECTOR, ".post-list")
+    assert "Bob browser update" not in feed_posts.text
 
     browser.get(f"{live_server}/explore")
     wait_for_text(browser, "@bob")

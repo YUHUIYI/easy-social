@@ -30,7 +30,40 @@
     }
   }
 
+  function setupComposerType(composer) {
+    const pollOptions = composer.querySelector("[data-poll-options]");
+    const mediaPicker = composer.querySelector("[data-composer-media]");
+    const body = composer.querySelector("[data-composer-body]");
+    const typeInputs = composer.querySelectorAll("[data-post-type]");
+
+    if (!pollOptions || !typeInputs.length) {
+      return;
+    }
+
+    function updateComposerMode() {
+      const selected = composer.querySelector("[data-post-type]:checked");
+      const isPoll = selected && selected.value === "poll";
+      pollOptions.hidden = !isPoll;
+      if (mediaPicker) {
+        mediaPicker.hidden = isPoll;
+      }
+      if (body) {
+        body.placeholder = isPoll ? "Ask a question for your poll" : "What is happening?";
+      }
+      pollOptions.querySelectorAll("[data-poll-required]").forEach(function (field) {
+        field.required = isPoll;
+      });
+    }
+
+    typeInputs.forEach(function (input) {
+      input.addEventListener("change", updateComposerMode);
+    });
+    updateComposerMode();
+  }
+
   function setupComposer(composer) {
+    setupComposerType(composer);
+
     const input = composer.querySelector("[data-media-input]");
     const preview = composer.querySelector("[data-media-preview]");
     const frame = composer.querySelector("[data-media-preview-frame]");

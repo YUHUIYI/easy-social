@@ -1,0 +1,38 @@
+{% set content = post.display_post %}
+{% set results = poll_results[content.id] if poll_results is defined and content.id in poll_results else [] %}
+{% set voted_option_id = user_poll_votes[content.id] if user_poll_votes is defined and content.id in user_poll_votes else none %}
+{% set total_votes = results | sum(attribute='vote_count') %}
+<section class="poll" aria-label="Poll">
+  {% if content.body %}
+    <p class="poll-question">{{ content.body }}</p>
+  {% endif %}
+  {% if voted_option_id is not none or content.author_id == current_user.id %}
+    <div class="poll-results">
+      {% for result in results %}
+        <div class="poll-result-row">
+          <div class="poll-result-header">
+            <span>{{ result.label }}</span>
+            <span class="muted">{{ result.percent }}% ({{ result.vote_count }})</span>
+          </div>
+          <div class="poll-result-bar" role="presentation">
+            <span
+              class="poll-result-fill{% if result.option_id == voted_option_id %} is-selected{% endif %}"
+              style="width: {{ result.percent }}%"
+            ></span>
+          </div>
+        </div>
+      {% endfor %}
+      <p class="muted poll-total">{{ total_votes }} vote{{ 's' if total_votes != 1 else '' }}</p>
+    </div>
+  {% else %}
+    <form method="post" action="{{ url_for('social.vote_poll', post_id=content.id) }}" class="poll-vote-form">
+      {% for result in results %}
+        <label class="poll-option-choice">
+          <input type="radio" name="poll_option_id" value="{{ result.option_id }}" required>
+          <span>{{ result.label }}</span>
+        </label>
+      {% endfor %}
+      <button type="submit">Vote</button>
+    </form>
+  {% endif %}
+</section>

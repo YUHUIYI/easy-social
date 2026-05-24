@@ -9,8 +9,12 @@
       <span class="muted">{{ content.created_at.strftime("%Y-%m-%d %H:%M") }}</span>
     </div>
   </header>
-  {% if content.body %}
-    <p class="post-body">{{ content.body }}</p>
+  {% if content.is_poll %}
+    {% include "social/_poll.html" %}
+  {% else %}
+    {% if content.body %}
+      <p class="post-body">{{ content.body }}</p>
+    {% endif %}
   {% endif %}
   {% if content.media_filename %}
     {% if content.media_type == "image" %}
