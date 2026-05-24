@@ -44,7 +44,7 @@ def register():
         return redirect(url_for("social.feed"))
 
     captcha_test_answer = None
-    if request.method == "GET":
+    if request.method == "GET" and current_app.config.get("TESTING", False):
         captcha_test_answer = _issue_captcha()
 
     if request.method == "POST":
